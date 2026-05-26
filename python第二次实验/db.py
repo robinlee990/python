@@ -24,8 +24,8 @@ def pd_is_na(val):
 DB_CONFIG = {
     'host': 'localhost',
     'port': 3306,
-    'user': 'data_user',
-    'password': 'YourPassword123!',   # ← 改成你 MySQL 用户的密码
+    'user': 'root',
+    'password': 'Root@123456',   # ← 改成你 MySQL 用户的密码
     'database': 'data_system',
     'charset': 'utf8mb4',
     'cursorclass': pymysql.cursors.DictCursor,

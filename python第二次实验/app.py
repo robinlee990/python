@@ -1078,7 +1078,7 @@ def admin_list_files():
 if __name__ == '__main__':
     print("=" * 60)
     print("  交互式数据分析系统 - 数据库持久化版")
-    print("  访问地址: http://127.0.0.1:8000")
+    print("  访问地址: http://127.0.0.1:5000")
     print("  默认管理员: admin / admin123")
     print("=" * 60)
-    app.run(debug=True, host='0.0.0.0', port=8000)
+    app.run(debug=True, host='0.0.0.0', port=5000)

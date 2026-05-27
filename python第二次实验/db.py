@@ -22,9 +22,9 @@ def pd_is_na(val):
 
 # ==================== MySQL 连接配置（请改成你自己 MySQL 的信息） ====================
 DB_CONFIG = {
-    'host': 'localhost',
+    'host': '10.77.195.183',
     'port': 3306,
-    'user': 'root',
+    'user': 'data_user',
     'password': 'Root@123456',   # ← 改成你 MySQL 用户的密码
     'database': 'data_system',
     'charset': 'utf8mb4',

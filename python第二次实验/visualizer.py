@@ -16,10 +16,16 @@ from flask import Blueprint, request, jsonify
 
 from utils import require_file, load_active_df
 
+import db
+
 # 中文字体
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
-sns.set_style("whitegrid")
+sns.set_theme(
+    style="whitegrid",
+    palette="deep",
+    font="SimHei"
+)
 
 viz_bp = Blueprint('viz', __name__, url_prefix='/api')
 
@@ -36,9 +42,39 @@ def visualize():
     chart_type = params.get('chart_type', 'bar')
     x_col = params.get('x_col')
     y_col = params.get('y_col')
+    # 自动推荐图表类型
+    recommended = []
+
+    if x_col:
+        col_info = next((c for c in cols if c['name'] == x_col), None)
+
+        if col_info:
+            recommended.extend(col_info.get('recommended_charts', []))
+
+    if y_col:
+        y_info = next((c for c in cols if c['name'] == y_col), None)
+
+        if y_info:
+            recommended.extend(y_info.get('recommended_charts', []))
+
+    recommended = list(set(recommended))
+
     title = params.get('title', f'{chart_type.upper()} Chart')
     color = params.get('color', '#4A90D9')
+    theme = params.get('theme', 'default')
     top_n = params.get('top_n', 10)
+
+    # 图表主题
+    theme_colors = {
+        'default': '#4A90D9',
+        'dark': '#2C3E50',
+        'green': '#27AE60',
+        'sunset': '#E67E22',
+        'purple': '#8E44AD'
+    }
+
+    if theme in theme_colors:
+        color = theme_colors[theme]
 
     if x_col and x_col not in df.columns:
         return jsonify({"error": f"列 '{x_col}' 不存在"}), 400
@@ -47,7 +83,9 @@ def visualize():
 
     try:
         plt.close('all')
-        fig, ax = plt.subplots(figsize=(10, 6))
+        fig, ax = plt.subplots(figsize=(12, 7))
+
+        ax.set_facecolor('#F8F9FA')
 
         if chart_type == 'bar':
             _draw_bar(df, ax, x_col, y_col, title, color, top_n)
@@ -77,9 +115,29 @@ def visualize():
         img_base64 = base64.b64encode(buf.read()).decode('utf-8')
         plt.close('all')
 
+        from flask import session
+        import db
+
+        db.insert_analysis_result(
+            file_id=session['file_id'],
+            user_id=session['user_id'],
+            analysis_type='visualization',
+            parameters={
+                "chart_type": chart_type,
+                "x_col": x_col,
+                "y_col": y_col,
+                "title": title,
+            },
+            result_data={
+                "message": "图表生成成功"
+            },
+            image_base64=img_base64
+        )
+
         return jsonify({
             "image": f"data:image/png;base64,{img_base64}",
             "chart_type": chart_type,
+            "recommended_charts": recommended
         })
     except Exception as e:
         plt.close('all')
@@ -87,18 +145,50 @@ def visualize():
 
 
 # ==================== 绘图函数 ====================
-
 def _draw_bar(df, ax, x_col, y_col, title, color, top_n):
     if y_col:
         data = df.groupby(x_col)[y_col].sum().nlargest(top_n).reset_index()
-        ax.bar(data[x_col].astype(str), data[y_col], color=color, edgecolor='white')
+
+        bars = ax.bar(
+            data[x_col].astype(str),
+            data[y_col],
+            color=color,
+            edgecolor='white'
+        )
+
     else:
         counts = df[x_col].value_counts().nlargest(top_n)
-        ax.bar(counts.index.astype(str), counts.values, color=color, edgecolor='white')
+
+        bars = ax.bar(
+            counts.index.astype(str),
+            counts.values,
+            color=color,
+            edgecolor='white'
+        )
+
+    # 半透明效果
+    for bar in bars:
+        bar.set_alpha(0.85)
+
+    # 数值标签
+    for bar in bars:
+        height = bar.get_height()
+
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            height,
+            f'{height:.0f}',
+            ha='center',
+            va='bottom',
+            fontsize=9
+        )
+
     ax.set_title(title, fontsize=14, fontweight='bold')
     ax.set_xlabel(x_col)
     ax.set_ylabel(y_col if y_col else 'Count')
+
     plt.xticks(rotation=45, ha='right')
+
 
 
 def _draw_line(df, ax, x_col, y_col, title, color, top_n):
@@ -112,13 +202,34 @@ def _draw_line(df, ax, x_col, y_col, title, color, top_n):
     ax.set_title(title, fontsize=14, fontweight='bold')
     ax.set_xlabel(x_col)
     ax.set_ylabel(y_col if y_col else '')
-    ax.grid(True, alpha=0.3)
+    ax.grid(True, linestyle='--', alpha=0.4)
     plt.xticks(rotation=45, ha='right')
 
 
 def _draw_scatter(df, ax, x_col, y_col, title, color):
     if x_col and y_col:
-        ax.scatter(df[x_col], df[y_col], alpha=0.6, c=color, edgecolors='white', s=50)
+        ax.scatter(
+            df[x_col],
+            df[y_col],
+            alpha=0.6,
+            c=color,
+            edgecolors='white',
+            s=50)
+        corr = df[[x_col, y_col]].dropna().corr().iloc[0, 1]
+
+        ax.text(
+            0.05,
+            0.95,
+            f'相关系数 r = {corr:.2f}',
+            transform=ax.transAxes,
+            fontsize=11,
+            verticalalignment='top',
+            bbox=dict(
+                boxstyle='round',
+                facecolor='white',
+                alpha=0.8
+            )
+        )
         if pd.api.types.is_numeric_dtype(df[x_col]) and pd.api.types.is_numeric_dtype(df[y_col]):
             try:
                 m, b = np.polyfit(df[x_col].dropna(), df[y_col].dropna(), 1)

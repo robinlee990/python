@@ -25,7 +25,7 @@ DB_CONFIG = {
     'host': '10.77.195.183',
     'port': 3306,
     'user': 'data_user',
-    'password': 'Root@123456',   # ← 改成你 MySQL 用户的密码
+    'password': 'Root@123456',
     'database': 'data_system',
     'charset': 'utf8mb4',
     'cursorclass': pymysql.cursors.DictCursor,

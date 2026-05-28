@@ -385,19 +385,19 @@
         <!-- ====== 智能分析 ====== -->
         <div id="panel-analyze" class="tab-panel hidden">
             <div class="card">
-                <div class="card-title">机器学习分析</div>
+                <div class="card-title">聚类分析</div>
                 <div class="form-row">
-                    <div class="form-group"><label>分析方法</label>
-                        <select id="analysisType">
-                            <option value="clustering">K-Means 聚类</option>
-                            <option value="regression">线性回归</option>
-                            <option value="pca">PCA 降维</option>
+                    <div class="form-group"><label>分析算法</label>
+                        <select id="analysisAlgorithm">
+                            <option value="kmeans">K-Means</option>
+                            <option value="dbscan">DBSCAN</option>
                         </select>
                     </div>
                     <div class="form-group" id="clusterGroup"><label>聚类数 K</label><input type="number" id="nClusters" value="3" min="2" max="10"></div>
-                    <div class="form-group hidden" id="regressionGroup"><label>目标列</label><select id="targetCol"></select></div>
+                    <div class="form-group"><label>实际值对比列（可选）</label><select id="groundTruthCol"><option value="">-- 不对比 --</option></select></div>
                 </div>
-                <div class="form-group"><label>分析列（留空自动选数值列）</label><div class="gap-sm" id="analysisCols" style="max-height:120px;overflow-y:auto"></div></div>
+                <div class="form-group"><label>分析列（可同时选择数值列和非数值列）</label><div class="gap-sm" id="analysisCols" style="max-height:120px;overflow-y:auto"></div></div>
+                <p class="text-muted" style="margin-bottom:10px;font-size:0.8em">💡 非数值列将自动通过 One-Hot 编码转换为数值特征参与聚类。选择"实际值对比列"可将聚类结果与数据集中的已有分类标签进行对比评估。</p>
                 <button class="btn btn-primary" onclick="runAnalysis()">🤖 开始分析</button>
             </div>
             <div class="card hidden" id="analysisResult">
@@ -734,45 +734,81 @@ async function generateChart(){
 }
 
 // ==================== 智能分析 ====================
-$('analysisType').addEventListener('change',function(){$('clusterGroup').classList.toggle('hidden',this.value!=='clustering');$('regressionGroup').classList.toggle('hidden',this.value!=='regression')});
+$('analysisAlgorithm').addEventListener('change',function(){
+    $('clusterGroup').classList.toggle('hidden', this.value==='dbscan');
+});
 
 async function loadColsForAnalysis(){
     try{const data=await api('/api/columns');ST.columns=data.columns||[];
+        // 所有列默认选中（数值+非数值），非数值列会自动通过 One-Hot 编码处理
         $('analysisCols').innerHTML=data.columns.map(c=>
-            `<label style="display:inline-flex;align-items:center;gap:3px;font-size:0.82em"><input type="checkbox" value="${c.name}" class="acb" ${c.type==='numeric'?'checked':''}>${c.name} <small class="text-muted">(${c.type})</small></label>`
+            `<label style="display:inline-flex;align-items:center;gap:3px;font-size:0.82em"><input type="checkbox" value="${c.name}" class="acb" checked>${c.name} <small class="text-muted">(${c.type})</small></label>`
         ).join('');
-        $('targetCol').innerHTML='<option value="">-- 选择 --</option>'+data.columns.filter(c=>c.type==='numeric').map(c=>`<option value="${c.name}">${c.name}</option>`).join('');
+        // 加载可用于实际值对比的分类列
+        const catCols = data.columns.filter(c => c.type === 'categorical' || (c.type !== 'numeric' && c.type !== 'datetime'));
+        $('groundTruthCol').innerHTML='<option value="">-- 不对比 --</option>' + catCols.map(c=>`<option value="${c.name}">${c.name} (${c.unique}类)</option>`).join('');
     }catch(e){}}
 
 async function runAnalysis(){
-    showLoading('智能分析中...');
+    showLoading('聚类分析中...');
     const cols=[...document.querySelectorAll('.acb:checked')].map(cb=>cb.value);
-    const params={type:$('analysisType').value,columns:cols,n_clusters:parseInt($('nClusters').value)||3,target:$('targetCol').value};
+    const params={
+        algorithm: $('analysisAlgorithm').value,
+        columns: cols,
+        n_clusters: parseInt($('nClusters').value)||3,
+        ground_truth_col: $('groundTruthCol').value
+    };
     try{
         const data=await api('/api/analyze',{method:'POST',body:JSON.stringify(params)});
         $('analysisResult').classList.remove('hidden');
         let html='';
-        if(data.type==='clustering'){
-            html+=`<div class="result-section"><h4>📊 K-Means 聚类</h4></div>
-                <div class="stats-grid"><div class="stat-card"><div class="value">${data.n_clusters}</div><div class="label">聚类数</div></div>
-                <div class="stat-card"><div class="value">${data.silhouette_score}</div><div class="label">轮廓系数</div></div>
-                <div class="stat-card"><div class="value">${data.columns_used.length}</div><div class="label">使用列</div></div></div>
-                <div class="result-section"><h4>聚类中心</h4><div class="code-block">${JSON.stringify(data.cluster_centers,null,2)}</div></div>
-                <div class="result-section"><h4>各簇样本数</h4><div class="code-block">${JSON.stringify(data.cluster_counts,null,2)}</div></div>`;
-        }else if(data.type==='regression'){
-            html+=`<div class="result-section"><h4>📈 线性回归</h4></div>
-                <div class="stats-grid"><div class="stat-card"><div class="value">${data.r2_score}</div><div class="label">R²</div></div>
-                <div class="stat-card"><div class="value">${data.rmse}</div><div class="label">RMSE</div></div>
-                <div class="stat-card"><div class="value">${data.mse}</div><div class="label">MSE</div></div>
-                <div class="stat-card"><div class="value">${data.train_size}/${data.test_size}</div><div class="label">训练/测试</div></div></div>
-                <div class="result-section"><h4>回归系数</h4><div class="code-block">${JSON.stringify(data.coefficients,null,2)}</div></div>`;
-        }else if(data.type==='pca'){
-            html+=`<div class="result-section"><h4>🔍 PCA 降维</h4></div>
-                <div class="stats-grid"><div class="stat-card"><div class="value">${data.n_components}</div><div class="label">主成分数</div></div>
-                <div class="stat-card"><div class="value">${(data.cumulative_variance[data.cumulative_variance.length-1]*100).toFixed(1)}%</div><div class="label">累计方差</div></div></div>
-                <div class="result-section"><h4>主成分载荷</h4><div class="code-block">${JSON.stringify(data.loadings,null,2)}</div></div>`;
+        const ev=data.evaluation||{};
+        const gte=data.ground_truth_evaluation||null;
+
+        const algoLabel=data.algorithm==='DBSCAN'?'DBSCAN 聚类':'K-Means 聚类';
+        html+=`<div class="result-section"><h4>📊 ${algoLabel}</h4></div>
+            <div class="stats-grid">
+            <div class="stat-card"><div class="value">${data.n_clusters!=null?data.n_clusters:'-'}</div><div class="label">聚类数</div></div>
+            <div class="stat-card"><div class="value">${ev.silhouette_score!=null?ev.silhouette_score:'-'}</div><div class="label">轮廓系数</div></div>
+            <div class="stat-card"><div class="value">${data.columns_used.length}</div><div class="label">使用列</div></div>
+            <div class="stat-card"><div class="value">${data.encoded_dimension||'-'}</div><div class="label">编码后维度</div></div></div>`;
+
+        if(data.algorithm==='K-Means'){
+            html+=`<div class="result-section"><h4>📋 内部评估指标</h4>
+                <div class="code-block">轮廓系数 (Silhouette Score): ${ev.silhouette_score} | 惯性 (Inertia): ${ev.inertia}</div></div>`;
+            html+=`<div class="result-section"><h4>聚类中心</h4><div class="code-block">${JSON.stringify(data.cluster_centers,null,2)}</div></div>`;
+        }else{
+            html+=`<div class="result-section"><h4>📋 内部评估指标</h4>
+                <div class="code-block">轮廓系数 (Silhouette Score): ${ev.silhouette_score} | 噪声点数: ${ev.noise_points} | eps: ${data.eps}</div></div>`;
         }
-        if(data.image)html+=`<div class="result-section"><h4>可视化</h4><div class="chart-container"><img src="${data.image}" alt="分析图"></div></div>`;
+
+        // 显示基于实际值的评估
+        if(gte){
+            html+=`<div class="result-section"><h4>🔍 基于实际值 "${gte.ground_truth_column}" 的外部评估</h4>
+                <div class="code-block">
+                实际类别数: ${gte.ground_truth_classes} | 实际类别: ${gte.ground_truth_labels.join(', ')}
+                </div>
+                <div class="stats-grid" style="margin-top:10px">`;
+            if(gte.adjusted_rand_score!=null)
+                html+=`<div class="stat-card"><div class="value">${gte.adjusted_rand_score}</div><div class="label">调整兰德指数 (ARI)</div></div>`;
+            if(gte.normalized_mutual_info!=null)
+                html+=`<div class="stat-card"><div class="value">${gte.normalized_mutual_info}</div><div class="label">归一化互信息 (NMI)</div></div>`;
+            if(gte.homogeneity!=null)
+                html+=`<div class="stat-card"><div class="value">${gte.homogeneity}</div><div class="label">同质性 (Homogeneity)</div></div>`;
+            if(gte.completeness!=null)
+                html+=`<div class="stat-card"><div class="value">${gte.completeness}</div><div class="label">完整性 (Completeness)</div></div>`;
+            if(gte.v_measure!=null)
+                html+=`<div class="stat-card"><div class="value">${gte.v_measure}</div><div class="label">V-Measure</div></div>`;
+            html+=`</div>`;
+
+            if(gte.evaluation_excluding_noise){
+                html+=`<div class="code-block" style="margin-top:8px">📌 ${gte.evaluation_excluding_noise.note} | 噪声点数: ${gte.evaluation_excluding_noise.noise_count} | 非噪声点数: ${gte.evaluation_excluding_noise.non_noise_count}</div>`;
+            }
+            html+=`</div>`;
+        }
+
+        html+=`<div class="result-section"><h4>各簇样本数</h4><div class="code-block">${JSON.stringify(data.cluster_counts,null,2)}</div></div>`;
+        if(data.image)html+=`<div class="result-section"><h4>📈 可视化</h4><div class="chart-container"><img src="${data.image}" alt="分析图"></div></div>`;
         $('analysisContent').innerHTML=html;
         $('analysisResult').scrollIntoView({behavior:'smooth'});
         showToast('分析完成！','success');
@@ -807,7 +843,7 @@ async function loadHistory(){
             let html='';
             data.results.forEach(r=>{
                 html+=`<div class="log-item"><span class="time">${new Date(r.created_at).toLocaleString()}</span>
-                    <div><strong>${r.username}</strong> - ${r.analysis_type==='clustering'?'K-Means聚类':r.analysis_type==='regression'?'线性回归':'PCA降维'}
+                    <div><strong>${r.username}</strong> - 聚类分析
                     <br><small class="text-muted">参数: ${JSON.stringify(r.parameters)}</small>
                     ${r.image_base64?`<br><img src="${r.image_base64}" style="max-width:200px;margin-top:4px;border-radius:4px">`:''}</div></div>`;
             });

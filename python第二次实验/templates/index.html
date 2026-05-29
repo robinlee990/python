@@ -1086,41 +1086,91 @@ async function loadHistory(){
     // 清洗历史
     try{
         const data=await api('/api/cleaning-history');
-        if(data.logs.length===0){$('cleaningHistoryList').innerHTML='<p class="text-muted">暂无清洗记录</p>'}
+        if(!data.logs||data.logs.length===0){$('cleaningHistoryList').innerHTML='<p class="text-muted">暂无清洗记录</p>'}
         else{
             let html='';
             data.logs.forEach(l=>{
-                const ops=Array.isArray(l.operation)?l.operation.join('；'):l.operation;
-                html+=`<div class="log-item"><span class="time">${new Date(l.created_at).toLocaleString()}</span>
-                    <div><strong>${l.username}</strong>: ${ops}
-                    <br><small class="text-muted">缺失:${l.missing_before}→${l.missing_after} | 异常值:${l.outliers_found} | 行:${l.rows_before}→${l.rows_after}</small></div></div>`;
+                const ops=Array.isArray(l.operation)?l.operation.join('；'):(l.operation||'无');
+                html+=`<div class="log-item"><span class="time">${fmtT(l.created_at)}</span>
+                    <div><strong>${l.username||'未知'}</strong>: ${ops}
+                    <br><small class="text-muted">缺失:${l.missing_before!=null?l.missing_before:'-'}→${l.missing_after!=null?l.missing_after:'-'} | 异常值:${l.outliers_found!=null?l.outliers_found:'-'} | 行:${l.rows_before!=null?l.rows_before:'-'}→${l.rows_after!=null?l.rows_after:'-'}</small></div></div>`;
             });
             $('cleaningHistoryList').innerHTML=html;
         }
-    }catch(e){$('cleaningHistoryList').innerHTML='<p class="text-muted">加载失败</p>'}
+    }catch(e){$('cleaningHistoryList').innerHTML=`<p class="text-muted" style="color:var(--danger)">加载清洗历史失败: ${e.message}</p>`}
 
     // 分析历史
     try{
         const data=await api('/api/analysis-history');
-        if(data.results.length===0){$('analysisHistoryList').innerHTML='<p class="text-muted">暂无分析记录</p>'}
+        if(!data.results||data.results.length===0){$('analysisHistoryList').innerHTML='<p class="text-muted">暂无分析记录</p>'}
         else{
             let html='';
             data.results.forEach(r=>{
-                html+=`<div class="log-item"><span class="time">${new Date(r.created_at).toLocaleString()}</span>
-                    <div><strong>${r.username}</strong> - 聚类分析
-                    <br><small class="text-muted">参数: ${JSON.stringify(r.parameters)}</small>
-                    ${r.image_base64?`<br><img src="${r.image_base64}" style="max-width:200px;margin-top:4px;border-radius:4px">`:''}</div></div>`;
+                // 解析分析类型显示名称
+                const typeMap={clustering:'聚类分析',regression:'回归分析',pca:'PCA降维'};
+                const typeLabel=typeMap[r.analysis_type]||r.analysis_type||'未知分析';
+                // 解析参数
+                let paramStr='';
+                try{
+                    const p=typeof r.parameters==='string'?JSON.parse(r.parameters):(r.parameters||{});
+                    if(r.analysis_type==='clustering'){
+                        paramStr=`算法: ${p.algorithm||'K-Means'} | 聚类数: ${p.n_clusters||3}`;
+                        if(p.ground_truth_col)paramStr+=` | 对比列: ${p.ground_truth_col}`;
+                    }else{
+                        paramStr=JSON.stringify(p);
+                    }
+                }catch(e){paramStr=JSON.stringify(r.parameters||'')}
+                // 解析结果摘要
+                let resultSummary='';
+                try{
+                    const rd=typeof r.result_data==='string'?JSON.parse(r.result_data):(r.result_data||{});
+                    if(r.analysis_type==='clustering'){
+                        const ev=rd.evaluation||{};
+                        if(ev.silhouette_score!=null)resultSummary+=`轮廓系数: ${ev.silhouette_score} `;
+                        if(rd.n_clusters!=null)resultSummary+=`| 聚类数: ${rd.n_clusters} `;
+                        if(rd.cluster_counts)resultSummary+=`| 各簇: ${JSON.stringify(rd.cluster_counts)}`;
+                        if(rd.ground_truth_evaluation){
+                            const gte=rd.ground_truth_evaluation;
+                            if(gte.adjusted_rand_score!=null)resultSummary+=` | ARI: ${gte.adjusted_rand_score}`;
+                            if(gte.normalized_mutual_info!=null)resultSummary+=` | NMI: ${gte.normalized_mutual_info}`;
+                        }
+                    }else if(r.analysis_type==='regression'){
+                        if(rd.r2_score!=null)resultSummary+=`R²: ${rd.r2_score} | RMSE: ${rd.rmse}`;
+                    }else if(r.analysis_type==='pca'){
+                        if(rd.cumulative_variance)resultSummary+=`累计方差: ${JSON.stringify(rd.cumulative_variance)}`;
+                    }
+                }catch(e){}
+                // 图片：只显示缩略图，可点击放大
+                let imgHtml='';
+                if(r.image_base64){
+                    imgHtml=`<br><img src="${r.image_base64}" style="max-width:120px;max-height:90px;margin-top:4px;border-radius:4px;cursor:pointer;border:1px solid var(--border)" 
+                        onclick="showImageModal(this.src)" title="点击放大">`;
+                }
+                html+=`<div class="log-item"><span class="time">${fmtT(r.created_at)}</span>
+                    <div><strong>${r.username||'未知'}</strong> - ${typeLabel}
+                    <br><small class="text-muted">${paramStr}</small>
+                    ${resultSummary?`<br><small style="color:var(--success);font-size:0.8em">📊 ${resultSummary}</small>`:''}
+                    ${imgHtml}</div></div>`;
             });
             $('analysisHistoryList').innerHTML=html;
         }
-    }catch(e){$('analysisHistoryList').innerHTML='<p class="text-muted">加载失败</p>'}
+    }catch(e){$('analysisHistoryList').innerHTML=`<p class="text-muted" style="color:var(--danger)">加载分析历史失败: ${e.message}</p>`}
+}
+
+// 图片放大弹窗
+function showImageModal(src){
+    const modal=document.createElement('div');
+    modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer';
+    modal.innerHTML=`<img src="${src}" style="max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.4)">`;
+    modal.onclick=()=>modal.remove();
+    document.body.appendChild(modal);
 }
 
 // ==================== 管理员检索 ====================
 
 // 工具
 function fmtSize(b){if(!b)return'-';if(b<1024)return b+'B';if(b<1048576)return(b/1024).toFixed(1)+'KB';return(b/1048576).toFixed(2)+'MB'}
-function fmtT(t){if(!t)return'-';try{const d=new Date(t);return d.toLocaleString('zh-CN',{weekday:'short',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return t.replace('T',' ').slice(0,16);}}
+function fmtT(t){if(!t)return'-';try{const d=new Date(t);if(isNaN(d.getTime()))throw new Error('Invalid Date');return d.toLocaleString('zh-CN',{weekday:'short',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return String(t).replace('T',' ').slice(0,16);}}
 function roleBadge(r){return r==='admin'?'<span class="badge" style="background:#fef0e6;color:#d46b08;font-size:0.75em;padding:1px 7px;border-radius:8px">管理员</span>':'<span class="badge" style="background:#eaf2f8;color:var(--primary);font-size:0.75em;padding:1px 7px;border-radius:8px">普通用户</span>'}
 function statusBadge(s){return s==='cleaned'?'<span class="fstat cleaned">已清洗</span>':'<span class="fstat uploaded">已上传</span>'}
 function typeBadge(t){const m={clustering:'聚类',regression:'回归',pca:'降维PCA'};const c={clustering:'#f0ecff;color:#6841d9',regression:'#fdf0e8;color:#d46b08',pca:'#e8f5ff;color:var(--primary)'};return`<span class="badge" style="background:${(c[t]||'#eee;color:#666').split(';')[0]};color:${(c[t]||'#eee;color:#666').split('color:')[1]};font-size:0.75em;padding:1px 7px;border-radius:8px">${m[t]||t}</span>`}

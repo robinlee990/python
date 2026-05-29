@@ -438,6 +438,8 @@ def get_cleaning_logs(file_id):
             d['operation'] = json.loads(d['operation'])
         if isinstance(d.get('params_json'), str):
             d['params_json'] = json.loads(d['params_json'])
+        if d.get('created_at'):
+            d['created_at'] = d['created_at'].isoformat()
     return rows
 
 
@@ -490,6 +492,8 @@ def get_analysis_results(file_id, analysis_type=None):
                 d['result_data'] = json.loads(d['result_data']) if isinstance(d['result_data'], str) else d['result_data']
             except:
                 pass
+        if d.get('created_at'):
+            d['created_at'] = d['created_at'].isoformat()
     return rows
 
 # ==================== 管理员检索功能 ====================

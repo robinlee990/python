@@ -1,10 +1,7 @@
 # ============================================================
 # 模块 4: 分析功能模块 (analyzer.py)
-<<<<<<< HEAD
 # 功能：聚类分析（K-Means / DBSCAN），含基于实际值的评估
-=======
 # 功能：机器学习分析（K-Means 聚类 / 线性回归 / PCA 降维）
->>>>>>> b0ef3be5cdf06859c2139d570c477e3eb0c4b8c1
 # ============================================================
 
 import io
@@ -16,7 +13,6 @@ import pandas as pd
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-<<<<<<< HEAD
 
 # 配置中文字体，解决图表中文显示为方框的问题
 plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'DejaVu Sans']
@@ -26,7 +22,6 @@ from sklearn.cluster import KMeans, DBSCAN
 from sklearn.preprocessing import StandardScaler, LabelEncoder, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.metrics import silhouette_score, adjusted_rand_score, normalized_mutual_info_score, homogeneity_score, completeness_score, v_measure_score
-=======
 from flask import Blueprint, request, jsonify, session
 from sklearn.cluster import KMeans
 from sklearn.linear_model import LinearRegression
@@ -34,15 +29,12 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import silhouette_score, mean_squared_error, r2_score
->>>>>>> b0ef3be5cdf06859c2139d570c477e3eb0c4b8c1
-
 import db
 from utils import require_file, df_to_json, load_active_df
 
 analyze_bp = Blueprint('analyze', __name__, url_prefix='/api')
 
 
-<<<<<<< HEAD
 # ==================== 数据编码工具函数 ====================
 
 def _encode_mixed_columns(df, columns):
@@ -135,22 +127,20 @@ def _encode_mixed_columns(df, columns):
 
 
 @analyze_bp.route('/analyze', methods=['POST'])
-@require_file
-def analyze():
-    """聚类分析（结果存入数据库）"""
-=======
-@analyze_bp.route('/analyze', methods=['POST'])
-@require_file
+
+#@require_file
+#def analyze():
+#    """聚类分析（结果存入数据库）"""
+#@analyze_bp.route('/analyze', methods=['POST'])
+#@require_file
 def analyze():
     """机器学习分析（结果存入数据库）"""
->>>>>>> b0ef3be5cdf06859c2139d570c477e3eb0c4b8c1
     df, cols, file_info = load_active_df()
     if df is None:
         return jsonify({"error": "无数据"}), 400
 
     file_id = session['file_id']
     params = request.get_json() or {}
-<<<<<<< HEAD
     columns = params.get('columns', [])
     n_clusters = params.get('n_clusters', 3)
     algorithm = params.get('algorithm', 'kmeans')
@@ -161,7 +151,8 @@ def analyze():
             result = _do_clustering_dbscan(df, columns, ground_truth_col)
         else:
             result = _do_clustering_kmeans(df, columns, n_clusters, ground_truth_col)
-=======
+    except Exception as e:
+        print(f"Error:{e}")
     analysis_type = params.get('type', 'clustering')
     columns = params.get('columns', [])
     target = params.get('target', '')
@@ -176,7 +167,6 @@ def analyze():
             result = _do_pca(df, columns)
         else:
             return jsonify({"error": f"不支持的分析类型: {analysis_type}"}), 400
->>>>>>> b0ef3be5cdf06859c2139d570c477e3eb0c4b8c1
 
         # 解析结果，保存到数据库
         result_json = result.get_json()
@@ -190,11 +180,8 @@ def analyze():
         db.insert_analysis_result(
             file_id=file_id,
             user_id=session['user_id'],
-<<<<<<< HEAD
             analysis_type='clustering',
-=======
-            analysis_type=analysis_type,
->>>>>>> b0ef3be5cdf06859c2139d570c477e3eb0c4b8c1
+            #analysis_type=analysis_type,
             parameters=params,
             result_data=result_data,
             image_base64=image_base64,
@@ -216,7 +203,6 @@ def analysis_history():
     return jsonify({"results": results})
 
 
-<<<<<<< HEAD
 # ==================== 基于实际值的评估函数 ====================
 
 def _evaluate_with_ground_truth(labels, df_original, ground_truth_col, columns, n_samples):
@@ -370,7 +356,6 @@ def _build_ground_truth_chart(data, columns, labels, ground_truth_col, df_origin
     ax5.pie(cluster_counts.values, labels=pie_labels, autopct='%1.1f%%',
             startangle=90, colors=plt.cm.viridis(np.linspace(0, 1, len(cluster_counts))))
     ax5.set_title('各簇样本分布', fontsize=12, fontweight='bold')
-=======
 # ==================== 聚类分析 ====================
 
 def _do_clustering(df, columns, n_clusters):
@@ -488,7 +473,6 @@ def _do_regression(df, columns, target):
     axes[1].barh(coef_df['特征'], coef_df['系数'], color=colors_bar, edgecolor='white')
     axes[1].set_title('特征系数（绝对值）', fontsize=12, fontweight='bold')
     axes[1].set_xlabel('|系数|')
->>>>>>> b0ef3be5cdf06859c2139d570c477e3eb0c4b8c1
 
     plt.tight_layout()
     buf = io.BytesIO()
@@ -497,8 +481,6 @@ def _do_regression(df, columns, target):
     img_base64 = f"data:image/png;base64,{base64.b64encode(buf.read()).decode('utf-8')}"
     plt.close('all')
 
-<<<<<<< HEAD
-    return img_base64
 
 
 # ==================== 通用聚类可视化 ====================
@@ -569,7 +551,6 @@ def _build_clustering_chart(X_2d, labels, columns, encoded_col_names, n_clusters
              ha='center', fontsize=7, color='gray', style='italic')
     
     plt.tight_layout(rect=[0, 0.03, 1, 1])
-=======
     return jsonify({
         "type": "regression",
         "algorithm": "Linear Regression",
@@ -634,14 +615,11 @@ def _do_pca(df, columns):
         axes[1].grid(True, alpha=0.3)
 
     plt.tight_layout()
->>>>>>> b0ef3be5cdf06859c2139d570c477e3eb0c4b8c1
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=120, bbox_inches='tight')
     buf.seek(0)
     img_base64 = f"data:image/png;base64,{base64.b64encode(buf.read()).decode('utf-8')}"
     plt.close('all')
-<<<<<<< HEAD
-    
     return img_base64
 
 
@@ -965,7 +943,6 @@ def _do_clustering_dbscan(df, columns, ground_truth_col=''):
         result["ground_truth_evaluation"] = ground_truth_eval
     
     return jsonify(result)
-=======
 
     pca_cols = [f"PC{i+1}" for i in range(n_components)]
     result_df = pd.DataFrame(X_pca, columns=pca_cols)
@@ -981,4 +958,3 @@ def _do_clustering_dbscan(df, columns, ground_truth_col=''):
         "image": img_base64,
         "sample_data": df_to_json(result_df.head(100)),
     })
->>>>>>> b0ef3be5cdf06859c2139d570c477e3eb0c4b8c1

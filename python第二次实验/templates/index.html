@@ -191,6 +191,15 @@
         .result-section h4{font-size:0.9em;margin-bottom:6px;color:var(--text)}
 
         .hidden{display:none!important}
+        /* ===== 管理员检索子标签 ===== */
+        .admin-sub-tab{
+            padding:7px 16px;border:none;background:none;cursor:pointer;
+            font-size:0.83em;color:var(--text-light);font-weight:500;
+            border-bottom:3px solid transparent;margin-bottom:-2px;
+            border-radius:6px 6px 0 0;transition:all 0.2s;
+        }
+        .admin-sub-tab:hover{background:#f0f4ff;color:var(--primary)}
+        .admin-sub-tab.active{color:var(--primary);border-bottom-color:var(--primary);background:#f0f4ff}
         .flex-between{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
         .mt-2{margin-top:12px}.mb-2{margin-bottom:12px}
         .text-center{text-align:center}.text-muted{color:var(--text-light);font-size:0.82em}
@@ -266,6 +275,7 @@
             <button class="tab disabled" data-tab="analyze">🤖 智能分析</button>
             <button class="tab disabled" data-tab="history">📜 历史记录</button>
             <button class="tab disabled" data-tab="export">💾 导出</button>
+            <button class="tab hidden" data-tab="admin" id="adminTab" style="background:rgba(231,76,60,0.12);color:#c0392b;border:1px solid rgba(231,76,60,0.25)">🔍 管理检索</button>
         </div>
 
         <!-- 加载遮罩 -->
@@ -428,10 +438,147 @@
                 </div>
             </div>
         </div>
+
+        <!-- ====== 管理员检索 ====== -->
+        <div id="panel-admin" class="tab-panel hidden">
+            <!-- 统计概览 -->
+            <div class="stats-grid" id="adminStatsGrid" style="margin-bottom:16px"></div>
+
+            <!-- 子标签 -->
+            <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:2px solid var(--border);flex-wrap:wrap">
+                <button class="admin-sub-tab active" data-sub="users"   onclick="switchAdminSub('users')">👥 用户</button>
+                <button class="admin-sub-tab"         data-sub="files"   onclick="switchAdminSub('files')">📁 文件</button>
+                <button class="admin-sub-tab"         data-sub="cleans"  onclick="switchAdminSub('cleans')">🧹 清洗日志</button>
+                <button class="admin-sub-tab"         data-sub="analyse" onclick="switchAdminSub('analyse')">🔬 分析记录</button>
+            </div>
+
+            <!-- ---- 用户检索 ---- -->
+            <div class="admin-sub-panel" id="asub-users">
+                <div class="card">
+                    <div class="card-title">用户检索条件</div>
+                    <div class="form-row">
+                        <div class="form-group"><label>关键字（用户名/昵称）</label><input type="text" id="au-kw" placeholder="模糊匹配..."></div>
+                        <div class="form-group"><label>角色</label>
+                            <select id="au-role"><option value="">全部</option><option value="user">普通用户</option><option value="admin">管理员</option></select>
+                        </div>
+                        <div class="form-group"><label>注册时间 起</label><input type="date" id="au-from"></div>
+                        <div class="form-group"><label>注册时间 止</label><input type="date" id="au-to"></div>
+                    </div>
+                    <div class="gap-sm mt-2">
+                        <button class="btn btn-primary" onclick="adminSearch('users',1)">🔍 查询</button>
+                        <button class="btn btn-outline" onclick="adminReset('users')">重置</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="flex-between" style="margin-bottom:10px">
+                        <div class="card-title" style="margin-bottom:0">用户列表</div>
+                        <span class="text-muted" id="au-count"></span>
+                    </div>
+                    <div class="table-wrap">
+                        <table><thead><tr><th>ID</th><th>用户名</th><th>昵称</th><th>角色</th><th>注册时间</th></tr></thead>
+                        <tbody id="au-tbody"><tr><td colspan="5" class="text-muted" style="text-align:center;padding:24px">输入条件后点击查询</td></tr></tbody></table>
+                    </div>
+                    <div class="pagination" id="au-pager"></div>
+                </div>
+            </div>
+
+            <!-- ---- 文件检索 ---- -->
+            <div class="admin-sub-panel hidden" id="asub-files">
+                <div class="card">
+                    <div class="card-title">文件检索条件</div>
+                    <div class="form-row">
+                        <div class="form-group"><label>文件名关键字</label><input type="text" id="af-kw" placeholder="模糊匹配..."></div>
+                        <div class="form-group"><label>上传用户名</label><input type="text" id="af-user" placeholder="模糊匹配..."></div>
+                        <div class="form-group"><label>状态</label>
+                            <select id="af-status"><option value="">全部</option><option value="uploaded">未清洗</option><option value="cleaned">已清洗</option></select>
+                        </div>
+                        <div class="form-group"><label>上传时间 起</label><input type="date" id="af-from"></div>
+                        <div class="form-group"><label>上传时间 止</label><input type="date" id="af-to"></div>
+                        <div class="form-group"><label>最小行数</label><input type="number" id="af-minr" placeholder="如 100" min="0"></div>
+                        <div class="form-group"><label>最大行数</label><input type="number" id="af-maxr" placeholder="如 10000" min="0"></div>
+                    </div>
+                    <div class="gap-sm mt-2">
+                        <button class="btn btn-primary" onclick="adminSearch('files',1)">🔍 查询</button>
+                        <button class="btn btn-outline" onclick="adminReset('files')">重置</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="flex-between" style="margin-bottom:10px">
+                        <div class="card-title" style="margin-bottom:0">文件列表</div>
+                        <span class="text-muted" id="af-count"></span>
+                    </div>
+                    <div class="table-wrap">
+                        <table><thead><tr><th>ID</th><th>文件名</th><th>上传用户</th><th>行数</th><th>列数</th><th>大小</th><th>状态</th><th>上传时间</th></tr></thead>
+                        <tbody id="af-tbody"><tr><td colspan="8" class="text-muted" style="text-align:center;padding:24px">输入条件后点击查询</td></tr></tbody></table>
+                    </div>
+                    <div class="pagination" id="af-pager"></div>
+                </div>
+            </div>
+
+            <!-- ---- 清洗日志 ---- -->
+            <div class="admin-sub-panel hidden" id="asub-cleans">
+                <div class="card">
+                    <div class="card-title">清洗日志检索条件</div>
+                    <div class="form-row">
+                        <div class="form-group"><label>文件名关键字</label><input type="text" id="ac-kw" placeholder="模糊匹配..."></div>
+                        <div class="form-group"><label>操作用户名</label><input type="text" id="ac-user" placeholder="模糊匹配..."></div>
+                        <div class="form-group"><label>操作时间 起</label><input type="date" id="ac-from"></div>
+                        <div class="form-group"><label>操作时间 止</label><input type="date" id="ac-to"></div>
+                    </div>
+                    <div class="gap-sm mt-2">
+                        <button class="btn btn-primary" onclick="adminSearch('cleans',1)">🔍 查询</button>
+                        <button class="btn btn-outline" onclick="adminReset('cleans')">重置</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="flex-between" style="margin-bottom:10px">
+                        <div class="card-title" style="margin-bottom:0">清洗日志</div>
+                        <span class="text-muted" id="ac-count"></span>
+                    </div>
+                    <div class="table-wrap">
+                        <table><thead><tr><th>ID</th><th>文件名</th><th>操作用户</th><th>行数（前→后）</th><th>缺失值（前→后）</th><th>异常值</th><th>操作摘要</th><th>时间</th></tr></thead>
+                        <tbody id="ac-tbody"><tr><td colspan="8" class="text-muted" style="text-align:center;padding:24px">输入条件后点击查询</td></tr></tbody></table>
+                    </div>
+                    <div class="pagination" id="ac-pager"></div>
+                </div>
+            </div>
+
+            <!-- ---- 分析记录 ---- -->
+            <div class="admin-sub-panel hidden" id="asub-analyse">
+                <div class="card">
+                    <div class="card-title">分析记录检索条件</div>
+                    <div class="form-row">
+                        <div class="form-group"><label>文件名关键字</label><input type="text" id="an-kw" placeholder="模糊匹配..."></div>
+                        <div class="form-group"><label>操作用户名</label><input type="text" id="an-user" placeholder="模糊匹配..."></div>
+                        <div class="form-group"><label>分析类型</label>
+                            <select id="an-type"><option value="">全部</option><option value="clustering">聚类（K-Means）</option><option value="regression">回归（Linear）</option><option value="pca">降维（PCA）</option></select>
+                        </div>
+                        <div class="form-group"><label>分析时间 起</label><input type="date" id="an-from"></div>
+                        <div class="form-group"><label>分析时间 止</label><input type="date" id="an-to"></div>
+                    </div>
+                    <div class="gap-sm mt-2">
+                        <button class="btn btn-primary" onclick="adminSearch('analyse',1)">🔍 查询</button>
+                        <button class="btn btn-outline" onclick="adminReset('analyse')">重置</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="flex-between" style="margin-bottom:10px">
+                        <div class="card-title" style="margin-bottom:0">分析记录</div>
+                        <span class="text-muted" id="an-count"></span>
+                    </div>
+                    <div class="table-wrap">
+                        <table><thead><tr><th>ID</th><th>文件名</th><th>操作用户</th><th>分析类型</th><th>主要参数</th><th>时间</th></tr></thead>
+                        <tbody id="an-tbody"><tr><td colspan="6" class="text-muted" style="text-align:center;padding:24px">输入条件后点击查询</td></tr></tbody></table>
+                    </div>
+                    <div class="pagination" id="an-pager"></div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
 <script>
+{% raw %}
 // ==================== 全局状态 ====================
 const ST = { userId:null, username:'', nickname:'', role:'', fileId:null,
              columns:[], currentPage:1, totalPages:1 };
@@ -460,6 +607,7 @@ function switchTab(name){
     if(name==='analyze')loadColsForAnalysis();
     if(name==='history')loadHistory();
     if(name==='files')refreshFileList();
+    if(name==='admin')adminInit();
 }
 function enableTabs(){document.querySelectorAll('.tab:not([data-tab="files"])').forEach(t=>t.classList.remove('disabled'))}
 
@@ -517,6 +665,13 @@ async function doLogout(){
 function showMainPage(){
     $('loginPage').classList.add('hidden');$('mainPage').classList.remove('hidden');
     $('headerUser').textContent=`👤 ${ST.nickname||ST.username}`;
+    // 管理员才显示检索 Tab
+    if(ST.role==='admin'){
+        $('adminTab').classList.remove('hidden');
+        $('adminTab').classList.remove('disabled');
+    } else {
+        $('adminTab').classList.add('hidden');
+    }
     switchTab('files');refreshFileList();
 }
 
@@ -852,6 +1007,137 @@ async function loadHistory(){
     }catch(e){$('analysisHistoryList').innerHTML='<p class="text-muted">加载失败</p>'}
 }
 
+// ==================== 管理员检索 ====================
+
+// 工具
+function fmtSize(b){if(!b)return'-';if(b<1024)return b+'B';if(b<1048576)return(b/1024).toFixed(1)+'KB';return(b/1048576).toFixed(2)+'MB'}
+function fmtT(t){if(!t)return'-';return t.replace('T',' ').slice(0,16)}
+function roleBadge(r){return r==='admin'?'<span class="badge" style="background:#fef0e6;color:#d46b08;font-size:0.75em;padding:1px 7px;border-radius:8px">管理员</span>':'<span class="badge" style="background:#eaf2f8;color:var(--primary);font-size:0.75em;padding:1px 7px;border-radius:8px">普通用户</span>'}
+function statusBadge(s){return s==='cleaned'?'<span class="fstat cleaned">已清洗</span>':'<span class="fstat uploaded">已上传</span>'}
+function typeBadge(t){const m={clustering:'聚类',regression:'回归',pca:'降维PCA'};const c={clustering:'#f0ecff;color:#6841d9',regression:'#fdf0e8;color:#d46b08',pca:'#e8f5ff;color:var(--primary)'};return`<span class="badge" style="background:${(c[t]||'#eee;color:#666').split(';')[0]};color:${(c[t]||'#eee;color:#666').split('color:')[1]};font-size:0.75em;padding:1px 7px;border-radius:8px">${m[t]||t}</span>`}
+
+// 子标签切换
+function switchAdminSub(name){
+    document.querySelectorAll('.admin-sub-tab').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.admin-sub-panel').forEach(p=>p.classList.add('hidden'));
+    document.querySelector(`[data-sub="${name}"]`).classList.add('active');
+    $('asub-'+name).classList.remove('hidden');
+}
+
+// 分页渲染
+function adminPager(pid, cur, total, sub){
+    const el=$(pid); if(!el)return;
+    if(total<=1){el.innerHTML='';return}
+    let h='';
+    h+=`<button class="btn btn-outline btn-sm" onclick="adminSearch('${sub}',${cur-1})" ${cur===1?'disabled':''}>«</button>`;
+    const s=Math.max(1,cur-2),e=Math.min(total,cur+2);
+    if(s>1)h+=`<button class="btn btn-outline btn-sm" onclick="adminSearch('${sub}',1)">1</button>`+(s>2?'<span class="text-muted">…</span>':'');
+    for(let i=s;i<=e;i++)h+=`<button class="btn ${i===cur?'btn-primary':'btn-outline'} btn-sm" onclick="adminSearch('${sub}',${i})">${i}</button>`;
+    if(e<total)h+=(e<total-1?'<span class="text-muted">…</span>':'')+`<button class="btn btn-outline btn-sm" onclick="adminSearch('${sub}',${total})">${total}</button>`;
+    h+=`<button class="btn btn-outline btn-sm" onclick="adminSearch('${sub}',${cur+1})" ${cur===total?'disabled':''}>»</button>`;
+    el.innerHTML=h;
+}
+
+// 首次进入管理检索面板：加载统计 + 默认显示第一个子标签
+let _adminInited=false;
+async function adminInit(){
+    if(!_adminInited){_adminInited=true;await loadAdminStats();}
+    // 确保第一个子标签可见
+    switchAdminSub('users');
+}
+
+// 统计概览
+async function loadAdminStats(){
+    try{
+        const d=await api('/api/admin/stats');
+        const byType=d.analysis_by_type||{};
+        const typeStr=Object.entries(byType).map(([k,v])=>`${{clustering:'聚类',regression:'回归',pca:'PCA'}[k]||k}:${v}`).join(' | ')||'暂无';
+        $('adminStatsGrid').innerHTML=`
+            <div class="stat-card"><div class="value">${d.total_users}</div><div class="label">用户总数</div></div>
+            <div class="stat-card"><div class="value">${d.total_files}</div><div class="label">文件总数</div></div>
+            <div class="stat-card"><div class="value">${d.cleaned_files}</div><div class="label">已清洗文件</div></div>
+            <div class="stat-card"><div class="value">${d.total_cleans}</div><div class="label">清洗次数</div></div>
+            <div class="stat-card"><div class="value">${d.total_analyses}</div><div class="label">分析次数<br><small style="font-size:0.6em;color:var(--text-light)">${typeStr}</small></div></div>`;
+    }catch(e){}
+}
+
+// 重置表单
+function adminReset(sub){
+    const ids={
+        users:['au-kw','au-role','au-from','au-to'],
+        files:['af-kw','af-user','af-status','af-from','af-to','af-minr','af-maxr'],
+        cleans:['ac-kw','ac-user','ac-from','ac-to'],
+        analyse:['an-kw','an-user','an-type','an-from','an-to'],
+    };
+    (ids[sub]||[]).forEach(id=>{const el=$(id);if(el){el.tagName==='SELECT'?el.selectedIndex=0:el.value=''}});
+}
+
+// 统一检索入口
+async function adminSearch(sub, page){
+    page=page||1;
+    const per_page=20;
+    let url='',tbodyId='',countId='',pagerId='',cols=0;
+
+    if(sub==='users'){
+        const p=new URLSearchParams({keyword:($('au-kw')||{}).value||'',role:($('au-role')||{}).value||'',date_from:($('au-from')||{}).value||'',date_to:($('au-to')||{}).value||'',page,per_page});
+        url='/api/admin/search/users?'+p; tbodyId='au-tbody'; countId='au-count'; pagerId='au-pager'; cols=5;
+    } else if(sub==='files'){
+        const p=new URLSearchParams({keyword:($('af-kw')||{}).value||'',username:($('af-user')||{}).value||'',status:($('af-status')||{}).value||'',date_from:($('af-from')||{}).value||'',date_to:($('af-to')||{}).value||'',page,per_page});
+        const mn=($('af-minr')||{}).value; const mx=($('af-maxr')||{}).value;
+        if(mn)p.set('min_rows',mn); if(mx)p.set('max_rows',mx);
+        url='/api/admin/search/files?'+p; tbodyId='af-tbody'; countId='af-count'; pagerId='af-pager'; cols=8;
+    } else if(sub==='cleans'){
+        const p=new URLSearchParams({keyword:($('ac-kw')||{}).value||'',username:($('ac-user')||{}).value||'',date_from:($('ac-from')||{}).value||'',date_to:($('ac-to')||{}).value||'',page,per_page});
+        url='/api/admin/search/cleaning-logs?'+p; tbodyId='ac-tbody'; countId='ac-count'; pagerId='ac-pager'; cols=8;
+    } else if(sub==='analyse'){
+        const p=new URLSearchParams({keyword:($('an-kw')||{}).value||'',username:($('an-user')||{}).value||'',analysis_type:($('an-type')||{}).value||'',date_from:($('an-from')||{}).value||'',date_to:($('an-to')||{}).value||'',page,per_page});
+        url='/api/admin/search/analysis-results?'+p; tbodyId='an-tbody'; countId='an-count'; pagerId='an-pager'; cols=6;
+    }
+
+    const tbody=$(tbodyId);
+    tbody.innerHTML=`<tr><td colspan="${cols}" class="text-muted" style="text-align:center;padding:24px">查询中…</td></tr>`;
+
+    try{
+        const data=await api(url);
+        $(countId).textContent=`共 ${data.total} 条`;
+        if(!data.items||!data.items.length){
+            tbody.innerHTML=`<tr><td colspan="${cols}" class="text-muted" style="text-align:center;padding:24px">暂无数据</td></tr>`;
+            $(pagerId).innerHTML=''; return;
+        }
+
+        let html='';
+        if(sub==='users'){
+            data.items.forEach(u=>{html+=`<tr><td>${u.id}</td><td>${u.username}</td><td>${u.nickname||'-'}</td><td>${roleBadge(u.role)}</td><td>${fmtT(u.created_at)}</td></tr>`});
+        } else if(sub==='files'){
+            data.items.forEach(f=>{
+                const nm=f.original_name||'';
+                html+=`<tr><td>${f.id}</td><td title="${nm}">${nm.length>26?nm.slice(0,26)+'…':nm}</td><td>${f.username}</td><td>${(f.row_count||0).toLocaleString()}</td><td>${f.col_count||0}</td><td>${fmtSize(f.file_size)}</td><td>${statusBadge(f.status)}</td><td>${fmtT(f.uploaded_at)}</td></tr>`;
+            });
+        } else if(sub==='cleans'){
+            data.items.forEach(c=>{
+                const logs=Array.isArray(c.operation)?c.operation:[];
+                const logStr=logs.length?logs.slice(0,2).join('；')+(logs.length>2?`…(共${logs.length}条)`:''):'-';
+                const nm=(c.filename||'');
+                html+=`<tr><td>${c.id}</td><td title="${nm}">${nm.length>20?nm.slice(0,20)+'…':nm}</td><td>${c.username}</td><td>${(c.rows_before||0)}→${(c.rows_after||0)}</td><td>${c.missing_before||0}→${c.missing_after||0}</td><td>${c.outliers_found||0}</td><td style="max-width:200px;white-space:normal;font-size:0.8em">${logStr}</td><td>${fmtT(c.created_at)}</td></tr>`;
+            });
+        } else if(sub==='analyse'){
+            data.items.forEach(a=>{
+                const p=a.parameters||{};
+                let ps='';
+                if(a.analysis_type==='clustering')ps=`n_clusters=${p.n_clusters||3}`;
+                else if(a.analysis_type==='regression')ps=`target=${p.target||'-'}`;
+                else if(a.analysis_type==='pca')ps=`cols=${(p.columns||[]).length||'自动'}`;
+                const nm=(a.filename||'');
+                html+=`<tr><td>${a.id}</td><td title="${nm}">${nm.length>22?nm.slice(0,22)+'…':nm}</td><td>${a.username}</td><td>${typeBadge(a.analysis_type)}</td><td><code style="font-size:0.78em">${ps}</code></td><td>${fmtT(a.created_at)}</td></tr>`;
+            });
+        }
+        tbody.innerHTML=html;
+        adminPager(pagerId, data.page, data.total_pages, sub);
+    }catch(e){
+        tbody.innerHTML=`<tr><td colspan="${cols}" style="text-align:center;padding:24px;color:var(--danger)">❌ ${e.message}</td></tr>`;
+    }
+}
+
 // ==================== 导出 ====================
 function exportData(fmt){window.open(`/api/export?format=${fmt}`,'_blank');showToast('正在下载...','info')}
 
@@ -863,6 +1149,7 @@ document.querySelectorAll('.tab').forEach(tab=>{tab.addEventListener('click',()=
 fetch('/api/auth/me').then(r=>r.json()).then(d=>{
     if(d.user){ST.userId=d.user.id;ST.username=d.user.username;ST.nickname=d.user.nickname;ST.role=d.user.role;showMainPage()}
 }).catch(()=>{/* not logged in */});
+{% endraw %}
 </script>
 </body>
 </html>

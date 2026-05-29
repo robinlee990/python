@@ -492,6 +492,315 @@ def get_analysis_results(file_id, analysis_type=None):
                 pass
     return rows
 
+# ==================== 管理员检索功能 ====================
+
+def search_users(keyword='', role='', date_from='', date_to='', page=1, per_page=20):
+    """
+    管理员检索用户
+    支持：用户名/昵称关键字、角色筛选、注册时间范围、分页
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+
+    conditions = []
+    params = []
+
+    if keyword:
+        conditions.append("(username LIKE %s OR nickname LIKE %s)")
+        params.extend([f'%{keyword}%', f'%{keyword}%'])
+    if role:
+        conditions.append("role = %s")
+        params.append(role)
+    if date_from:
+        conditions.append("DATE(created_at) >= %s")
+        params.append(date_from)
+    if date_to:
+        conditions.append("DATE(created_at) <= %s")
+        params.append(date_to)
+
+    where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    # 总数
+    cursor.execute(f"SELECT COUNT(*) as cnt FROM users {where_sql}", params)
+    total = cursor.fetchone()['cnt']
+
+    # 分页数据
+    offset = (page - 1) * per_page
+    cursor.execute(
+        f"""SELECT id, username, nickname, role, created_at
+            FROM users {where_sql}
+            ORDER BY created_at DESC
+            LIMIT %s OFFSET %s""",
+        params + [per_page, offset]
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    return {
+        "items": rows,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": max(1, (total + per_page - 1) // per_page),
+    }
+
+
+def search_files(keyword='', username='', status='', date_from='', date_to='',
+                 min_rows=None, max_rows=None, page=1, per_page=20):
+    """
+    管理员检索文件
+    支持：文件名关键字、上传用户名、清洗状态、上传时间范围、行数范围、分页
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+
+    conditions = []
+    params = []
+
+    if keyword:
+        conditions.append("(f.original_name LIKE %s OR f.filename LIKE %s)")
+        params.extend([f'%{keyword}%', f'%{keyword}%'])
+    if username:
+        conditions.append("u.username LIKE %s")
+        params.append(f'%{username}%')
+    if status:
+        conditions.append("f.status = %s")
+        params.append(status)
+    if date_from:
+        conditions.append("DATE(f.uploaded_at) >= %s")
+        params.append(date_from)
+    if date_to:
+        conditions.append("DATE(f.uploaded_at) <= %s")
+        params.append(date_to)
+    if min_rows is not None:
+        conditions.append("f.row_count >= %s")
+        params.append(int(min_rows))
+    if max_rows is not None:
+        conditions.append("f.row_count <= %s")
+        params.append(int(max_rows))
+
+    where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    cursor.execute(
+        f"""SELECT COUNT(*) as cnt
+            FROM files f JOIN users u ON f.user_id = u.id
+            {where_sql}""",
+        params
+    )
+    total = cursor.fetchone()['cnt']
+
+    offset = (page - 1) * per_page
+    cursor.execute(
+        f"""SELECT f.id, f.original_name, f.filename, f.file_size,
+                   f.row_count, f.col_count, f.status, f.uploaded_at,
+                   u.id as user_id, u.username
+            FROM files f JOIN users u ON f.user_id = u.id
+            {where_sql}
+            ORDER BY f.uploaded_at DESC
+            LIMIT %s OFFSET %s""",
+        params + [per_page, offset]
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    return {
+        "items": rows,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": max(1, (total + per_page - 1) // per_page),
+    }
+
+
+def search_cleaning_logs(keyword='', username='', date_from='', date_to='',
+                         page=1, per_page=20):
+    """
+    管理员检索清洗日志
+    支持：文件名关键字、操作用户名、时间范围、分页
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+
+    conditions = []
+    params = []
+
+    if keyword:
+        conditions.append("f.original_name LIKE %s")
+        params.append(f'%{keyword}%')
+    if username:
+        conditions.append("u.username LIKE %s")
+        params.append(f'%{username}%')
+    if date_from:
+        conditions.append("DATE(cl.created_at) >= %s")
+        params.append(date_from)
+    if date_to:
+        conditions.append("DATE(cl.created_at) <= %s")
+        params.append(date_to)
+
+    where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    cursor.execute(
+        f"""SELECT COUNT(*) as cnt
+            FROM cleaning_logs cl
+            JOIN users u ON cl.user_id = u.id
+            JOIN files f ON cl.file_id = f.id
+            {where_sql}""",
+        params
+    )
+    total = cursor.fetchone()['cnt']
+
+    offset = (page - 1) * per_page
+    cursor.execute(
+        f"""SELECT cl.id, cl.file_id, cl.missing_before, cl.missing_after,
+                   cl.outliers_found, cl.rows_before, cl.rows_after,
+                   cl.operation, cl.created_at,
+                   u.username, f.original_name as filename
+            FROM cleaning_logs cl
+            JOIN users u ON cl.user_id = u.id
+            JOIN files f ON cl.file_id = f.id
+            {where_sql}
+            ORDER BY cl.created_at DESC
+            LIMIT %s OFFSET %s""",
+        params + [per_page, offset]
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    for d in rows:
+        if isinstance(d.get('operation'), str):
+            try:
+                d['operation'] = json.loads(d['operation'])
+            except Exception:
+                pass
+
+    return {
+        "items": rows,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": max(1, (total + per_page - 1) // per_page),
+    }
+
+
+def search_analysis_results(keyword='', username='', analysis_type='',
+                            date_from='', date_to='', page=1, per_page=20):
+    """
+    管理员检索分析记录
+    支持：文件名关键字、操作用户名、分析类型、时间范围、分页
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+
+    conditions = []
+    params = []
+
+    if keyword:
+        conditions.append("f.original_name LIKE %s")
+        params.append(f'%{keyword}%')
+    if username:
+        conditions.append("u.username LIKE %s")
+        params.append(f'%{username}%')
+    if analysis_type:
+        conditions.append("ar.analysis_type = %s")
+        params.append(analysis_type)
+    if date_from:
+        conditions.append("DATE(ar.created_at) >= %s")
+        params.append(date_from)
+    if date_to:
+        conditions.append("DATE(ar.created_at) <= %s")
+        params.append(date_to)
+
+    where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    cursor.execute(
+        f"""SELECT COUNT(*) as cnt
+            FROM analysis_results ar
+            JOIN users u ON ar.user_id = u.id
+            JOIN files f ON ar.file_id = f.id
+            {where_sql}""",
+        params
+    )
+    total = cursor.fetchone()['cnt']
+
+    offset = (page - 1) * per_page
+    cursor.execute(
+        f"""SELECT ar.id, ar.file_id, ar.analysis_type, ar.parameters,
+                   ar.created_at, u.username, f.original_name as filename
+            FROM analysis_results ar
+            JOIN users u ON ar.user_id = u.id
+            JOIN files f ON ar.file_id = f.id
+            {where_sql}
+            ORDER BY ar.created_at DESC
+            LIMIT %s OFFSET %s""",
+        params + [per_page, offset]
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    for d in rows:
+        if isinstance(d.get('parameters'), str):
+            try:
+                d['parameters'] = json.loads(d['parameters'])
+            except Exception:
+                pass
+
+    return {
+        "items": rows,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": max(1, (total + per_page - 1) // per_page),
+    }
+
+
+def get_admin_stats():
+    """管理员全局统计概览"""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT COUNT(*) as cnt FROM users")
+    total_users = cursor.fetchone()['cnt']
+
+    cursor.execute("SELECT COUNT(*) as cnt FROM users WHERE role = 'admin'")
+    total_admins = cursor.fetchone()['cnt']
+
+    cursor.execute("SELECT COUNT(*) as cnt FROM files")
+    total_files = cursor.fetchone()['cnt']
+
+    cursor.execute("SELECT COUNT(*) as cnt FROM files WHERE status = 'cleaned'")
+    cleaned_files = cursor.fetchone()['cnt']
+
+    cursor.execute("SELECT COUNT(*) as cnt FROM cleaning_logs")
+    total_cleans = cursor.fetchone()['cnt']
+
+    cursor.execute("SELECT COUNT(*) as cnt FROM analysis_results")
+    total_analyses = cursor.fetchone()['cnt']
+
+    cursor.execute(
+        "SELECT analysis_type, COUNT(*) as cnt FROM analysis_results GROUP BY analysis_type"
+    )
+    analysis_by_type = {r['analysis_type']: r['cnt'] for r in cursor.fetchall()}
+
+    cursor.execute(
+        """SELECT u.username, COUNT(f.id) as file_count
+           FROM users u LEFT JOIN files f ON u.id = f.user_id
+           GROUP BY u.id, u.username
+           ORDER BY file_count DESC LIMIT 5"""
+    )
+    top_users = cursor.fetchall()
+
+    conn.close()
+
+    return {
+        "total_users": total_users,
+        "total_admins": total_admins,
+        "total_files": total_files,
+        "cleaned_files": cleaned_files,
+        "total_cleans": total_cleans,
+        "total_analyses": total_analyses,
+        "analysis_by_type": analysis_by_type,
+        "top_users_by_files": top_users,
+    }
 
 # ---- 首次导入时自动初始化 ----
 if __name__ != '__main__':

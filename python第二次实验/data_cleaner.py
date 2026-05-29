@@ -110,6 +110,16 @@ def clean_data():
                         df[col] = df[col].astype(float)
                         df.loc[df[col] < lower, col] = lower
                         df.loc[df[col] > upper, col] = upper
+                    elif outlier_method == 'zscore':
+                        z = np.abs(stats.zscore(col_data))
+                        outliers_mask = pd.Series(False, index=df.index)
+                        outliers_mask.loc[col_data.index[z > outlier_threshold]] = True
+
+                        # 为 Z-score 计算上下界以便支持 cap 操作
+                        mean_val = col_data.mean()
+                        std_val = col_data.std()
+                        lower = mean_val - outlier_threshold * std_val
+                        upper = mean_val + outlier_threshold * std_val
                     cleaning_log.append(f"列 [{col}] 检测到 {n_out} 个异常值，已用边界值替换")
                 elif outlier_action == 'remove':
                     df = df[~outliers_mask]

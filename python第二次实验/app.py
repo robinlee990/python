@@ -42,7 +42,7 @@ app.register_blueprint(analyze_bp)    # 模块4: 分析功能
 if __name__ == '__main__':
     print("=" * 60)
     print("  交互式数据分析系统 - 模块化架构 v2.0")
-    print("  访问地址: http://127.0.0.1:5000")
+    print("  访问地址: http://127.0.0.1:5001")
     print("  默认管理员: admin / admin123")
     print("")
     print("  模块分工：")
@@ -52,4 +52,4 @@ if __name__ == '__main__':
     print("    模块4 分析功能 → analyzer.py")
     print("    模块5 Web界面  → web_routes.py")
     print("=" * 60)
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5001)

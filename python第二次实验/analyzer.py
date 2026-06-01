@@ -18,10 +18,58 @@ import matplotlib.pyplot as plt
 plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 from flask import Blueprint, request, jsonify, session
+# Blueprint: Flask的蓝图对象，用于模块化组织路由，将不同功能的API分组管理
+# request: 请求对象，包含客户端发送的所有HTTP请求信息（如GET/POST参数、JSON数据等）
+# jsonify: 将Python字典或列表转换为JSON格式的响应，方便前端接收
+# session: 会话对象，用于在服务器端存储用户会话数据（如登录状态、用户ID等）
 from sklearn.cluster import KMeans, DBSCAN
+# KMeans: K均值聚类算法
+# 基于距离的迭代聚类方法
+# 需要预先指定聚类数量K
+# 适用于球形分布的数据簇
+# 计算效率高，适合大数据集
+# DBSCAN: 基于密度的聚类算法
+# 不需要预先指定聚类数量
+# 能发现任意形状的簇
+# 可以识别噪声点（离群值）
+# 基于两个参数：eps（邻域半径）和min_samples（最小样本数）
 from sklearn.preprocessing import StandardScaler, LabelEncoder, OneHotEncoder
-from sklearn.compose import ColumnTransformer
+# StandardScaler: 标准化处理
+# 将数据转换为均值为0、标准差为1的标准正态分布
+# 公式：(x - mean) / std
+# 消除不同特征量纲的影响，对聚类等距离敏感算法很重要
+# LabelEncoder: 标签编码
+# 将分类变量转换为整数编码
+# 例如：["男", "女"] → [0, 1]
+# 适用于有序分类或树模型
+# OneHotEncoder: 独热编码
+# 将分类变量转换为二进制向量
+# 例如：["红", "绿", "蓝"] → [[1,0,0], [0,1,0], [0,0,1]]
+# 避免引入虚假的顺序关系，适用于无序分类变量
+from sklearn.compose import ColumnTransformer  # 列转换器
 from sklearn.metrics import silhouette_score, adjusted_rand_score, normalized_mutual_info_score, homogeneity_score, completeness_score, v_measure_score
+# silhouette_score: 轮廓系数
+# 衡量聚类的紧密度和分离度
+# 取值范围：[-1, 1]，越接近1越好
+# 不需要真实标签，无监督评估
+# adjusted_rand_score: 调整兰德指数
+# 比较预测聚类与真实标签的一致性
+# 取值范围：[-1, 1]，1表示完美匹配
+# 需要真实标签，有监督评估
+# normalized_mutual_info_score: 标准化互信息
+# 基于信息论的聚类评估指标
+# 衡量两个标签分布的相互依赖程度
+# 取值范围：[0, 1]，1表示完全相关
+# homogeneity_score: 同质性得分
+# 每个簇只包含单一类别的样本
+# 取值范围：[0, 1]，1表示完全同质
+# completeness_score: 完整性得分
+# 同一类别的所有样本都在同一个簇中
+# 取值范围：[0, 1]，1表示完全完整
+# v_measure_score: V-measure得分
+# 同质性和完整性的调和平均
+# 综合评估聚类质量
+# 取值范围：[0, 1]，1表示最佳
 
 import db
 from utils import require_file, df_to_json, load_active_df
@@ -76,6 +124,11 @@ def _encode_mixed_columns(df, columns):
         max_categories = 20
         encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore',
                                 max_categories=max_categories, drop=None)
+        # 创建独热编码器，将分类变量转换为二进制向量：
+        # sparse_output=False：返回稠密数组而非稀疏矩阵
+        # handle_unknown='ignore'：遇到未知类别时全置0，不报错
+        # max_categories=20：每列最多编码20个类别，防止维度爆炸
+        # drop=None：保留所有类别，不进行多重共线性处理
         transformers.append(('cat', encoder, categorical_cols))
         
         # 生成 One-Hot 编码后的列名
@@ -94,8 +147,8 @@ def _encode_mixed_columns(df, columns):
         raise ValueError("没有可用的列进行聚类分析")
     
     preprocessor = ColumnTransformer(
-        transformers=transformers,
-        remainder='drop'
+        transformers=transformers,   # 应用之前配置的标准化器和编码器到对应列
+        remainder='drop'    # 丢弃未在transformers中指定的列
     )
     
     # 处理数据并编码
@@ -107,7 +160,7 @@ def _encode_mixed_columns(df, columns):
             fill_val = mode_val[0] if len(mode_val) > 0 else "未知"
             data[col] = data[col].fillna(fill_val)
     
-    X_encoded = preprocessor.fit_transform(data)
+    X_encoded = preprocessor.fit_transform(data)   # 纯数值NumPy数组
     
     # 再次确保 encoded_col_names 长度与 X_encoded 列数一致
     # OneHotEncoder 可能因为 handle_unknown 产生额外列
@@ -144,7 +197,7 @@ def analyze():
         # 解析结果，保存到数据库
         result_json = result.get_json()
         if isinstance(result_json, str):
-            result_data = json.loads(result_json)
+            result_data = json.loads(result_json)    # 转换为字典
         else:
             result_data = result_json
 
@@ -172,7 +225,7 @@ def analysis_history():
     """获取分析历史"""
     analysis_type = request.args.get('type', None)
     results = db.get_analysis_results(session['file_id'], analysis_type)
-    return jsonify({"results": results})
+    return jsonify({"results": results})    # 返回包含results键的JSON对象给前端
 
 
 # ==================== 基于实际值的评估函数 ====================
@@ -200,9 +253,11 @@ def _evaluate_with_ground_truth(labels, df_original, ground_truth_col, columns, 
     gt_labels = le.fit_transform(gt_values.astype(str))
 
     # 只取对应行的聚类标签
-    idx_map = {v: i for i, v in enumerate(df_original[columns].dropna().index)}
-    label_indices = [idx_map[idx] for idx in common_idx if idx in idx_map]
-    cluster_labels_aligned = labels[label_indices]
+    idx_map = {v: i for i, v in enumerate(df_original[columns].dropna().index)}   # 构建原始数据索引到数组位置的映射字典
+    label_indices = [idx_map[idx] for idx in common_idx if idx in idx_map]    # 收集所有符合条件的位置到 label_indices 列表
+    cluster_labels_aligned = labels[label_indices]    # 使用NumPy高级索引提取对齐后的聚类标签：label_indices 包含有效样本的位置列表,从完整聚类标签数组中选取对应位置的元素
+
+
 
     n_classes = len(set(gt_labels))
     n_clusters = len(set(cluster_labels_aligned))
@@ -243,101 +298,15 @@ def _evaluate_with_ground_truth(labels, df_original, ground_truth_col, columns, 
 
     # 计算各簇中实际类别的分布（交叉表）
     try:
-        ct = pd.crosstab(cluster_labels_aligned, gt_labels)
-        ct.index = [f"簇 {i}" for i in ct.index]
-        ct.columns = [str(le.classes_[i]) for i in ct.columns]
-        evaluation["cluster_ground_truth_distribution"] = ct.to_dict()
+        ct = pd.crosstab(cluster_labels_aligned, gt_labels)   # 创建交叉列联表
+        ct.index = [f"簇 {i}" for i in ct.index]    # 重命名行索引为可读格式
+        ct.columns = [str(le.classes_[i]) for i in ct.columns]    # 重命名列名为真实的类别名称，le.classes_是LabelEncoder学习的类别映射
+        evaluation["cluster_ground_truth_distribution"] = ct.to_dict()   # 将DataFrame转换为嵌套字典，添加到评估结果中
+
     except:
         evaluation["cluster_ground_truth_distribution"] = {}
 
     return evaluation
-
-
-def _build_ground_truth_chart(data, columns, labels, ground_truth_col, df_original, algorithm_name):
-    """生成包含实际值对比的可视化图表"""
-    plt.close('all')
-    img_base64 = None
-
-    # 获取实际标签编码
-    common_idx = df_original[columns].dropna().index
-    gt_series = df_original.loc[common_idx, ground_truth_col].dropna()
-    common_idx = gt_series.index
-    le = LabelEncoder()
-    gt_labels = le.fit_transform(gt_series.values.astype(str))
-
-    idx_map = {v: i for i, v in enumerate(df_original[columns].dropna().index)}
-    label_indices = [idx_map[idx] for idx in common_idx if idx in idx_map]
-    cluster_labels_aligned = labels[label_indices]
-
-    n_gt = len(le.classes_)
-    n_cl = len(set(labels))
-
-    fig = plt.figure(figsize=(18, 10))
-
-    # 子图1：聚类结果散点图
-    ax1 = fig.add_subplot(2, 3, (1, 2))
-    scatter = ax1.scatter(data[columns[0]], data[columns[1]],
-                          c=labels, cmap='viridis', alpha=0.6, s=40)
-    ax1.set_xlabel(columns[0])
-    ax1.set_ylabel(columns[1])
-    ax1.set_title(f'{algorithm_name} 聚类结果', fontsize=12, fontweight='bold')
-    plt.colorbar(scatter, ax=ax1, label='Cluster')
-
-    # 子图2：实际分类散点图
-    ax2 = fig.add_subplot(2, 3, 3)
-    data_aligned = data.iloc[label_indices]
-    scatter2 = ax2.scatter(data_aligned[columns[0]], data_aligned[columns[1]],
-                           c=gt_labels, cmap='Set3', alpha=0.6, s=40)
-    ax2.set_xlabel(columns[0])
-    ax2.set_ylabel(columns[1])
-    ax2.set_title(f'实际值: {ground_truth_col}', fontsize=12, fontweight='bold')
-    cbar2 = plt.colorbar(scatter2, ax=ax2)
-    cbar2.set_ticks(range(n_gt))
-    cbar2.set_ticklabels([str(x)[:15] for x in le.classes_])
-
-    # 子图3：各簇中实际类别分布（堆叠柱状图）
-    ax3 = fig.add_subplot(2, 3, 4)
-    ct = pd.crosstab(cluster_labels_aligned, gt_labels)
-    ct_pct = ct.div(ct.sum(axis=1), axis=0)
-    ct_pct.index = [f"簇 {i}" for i in ct_pct.index]
-    ct_pct.columns = [str(x)[:12] for x in le.classes_]
-    ct_pct.plot(kind='bar', stacked=True, ax=ax3, colormap='Set3', edgecolor='white')
-    ax3.set_title('各簇中实际类别占比', fontsize=12, fontweight='bold')
-    ax3.set_xlabel('聚类结果')
-    ax3.set_ylabel('占比')
-    ax3.legend(title=ground_truth_col, fontsize=7, title_fontsize=8, loc='upper right')
-    ax3.set_xticklabels(ax3.get_xticklabels(), rotation=0)
-
-    # 子图4：实际类别中各簇分布（堆叠柱状图）
-    ax4 = fig.add_subplot(2, 3, 5)
-    ct2 = pd.crosstab(gt_labels, cluster_labels_aligned)
-    ct2_pct = ct2.div(ct2.sum(axis=1), axis=0)
-    ct2_pct.index = [str(x)[:12] for x in le.classes_]
-    ct2_pct.columns = [f"簇 {i}" for i in ct2_pct.columns]
-    ct2_pct.plot(kind='bar', stacked=True, ax=ax4, colormap='viridis', edgecolor='white')
-    ax4.set_title('实际类别中各簇分布', fontsize=12, fontweight='bold')
-    ax4.set_xlabel(ground_truth_col)
-    ax4.set_ylabel('占比')
-    ax4.legend(title='聚类', fontsize=7, title_fontsize=8, loc='upper right')
-    ax4.set_xticklabels(ax4.get_xticklabels(), rotation=45, ha='right')
-
-    # 子图5：各簇样本分布饼图
-    ax5 = fig.add_subplot(2, 3, 6)
-    cluster_counts = pd.Series(labels).value_counts().sort_index()
-    pie_labels = [f"簇 {i}" for i in cluster_counts.index]
-    ax5.pie(cluster_counts.values, labels=pie_labels, autopct='%1.1f%%',
-            startangle=90, colors=plt.cm.viridis(np.linspace(0, 1, len(cluster_counts))))
-    ax5.set_title('各簇样本分布', fontsize=12, fontweight='bold')
-
-    plt.tight_layout()
-    buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=120, bbox_inches='tight')
-    buf.seek(0)
-    img_base64 = f"data:image/png;base64,{base64.b64encode(buf.read()).decode('utf-8')}"
-    plt.close('all')
-
-    return img_base64
-
 
 # ==================== 通用聚类可视化 ====================
 
@@ -357,7 +326,7 @@ def _build_clustering_chart(X_2d, labels, columns, encoded_col_names, n_clusters
     if X_2d.shape[1] >= 2:
         pca = PCA(n_components=2)
         coords = pca.fit_transform(X_2d)
-        var1, var2 = pca.explained_variance_ratio_[:2]
+        var1, var2 = pca.explained_variance_ratio_[:2]    # 获取前两个主成分的解释方差比例，表示每个主成分保留了多少原始数据的信息
     else:
         # 只有一维，复制一列做 Y 轴
         coords = np.column_stack([X_2d[:, 0], np.zeros(n_samples)])
@@ -551,7 +520,7 @@ def _do_clustering_kmeans(df, columns, n_clusters, ground_truth_col=''):
     except ValueError as e:
         return jsonify({"error": f"数据编码失败: {str(e)}"}), 400
     
-    n_samples = X_encoded.shape[0]
+    n_samples = X_encoded.shape[0]    # 数组行数（样本数）
     if n_samples < 2:
         return jsonify({"error": "有效样本数不足"}), 400
     
@@ -559,25 +528,11 @@ def _do_clustering_kmeans(df, columns, n_clusters, ground_truth_col=''):
     labels = kmeans.fit_predict(X_encoded)
     
     # 内部评估指标
-    sil_score = silhouette_score(X_encoded, labels) if len(set(labels)) > 1 else 0
-    inertia = float(kmeans.inertia_)
+    sil_score = silhouette_score(X_encoded, labels) if len(set(labels)) > 1 else 0  # 轮廓系数
+    inertia = float(kmeans.inertia_)    # 簇内平方和
     
     # 基于实际值的评估
     ground_truth_eval = _evaluate_with_ground_truth(labels, df, ground_truth_col, columns, n_samples)
-    
-    # 聚类中心（仅对原始数值列有意义）
-    centers_dict = {}
-    numeric_cols_in = [c for c in columns if pd.api.types.is_numeric_dtype(df[c])]
-    if numeric_cols_in:
-        # 找到数值列在 ColumnTransformer 输出中的位置
-        num_indices = list(range(len(numeric_cols_in)))
-        centers = kmeans.cluster_centers_[:, num_indices]
-        # 需要逆标准化
-        num_transformer = preprocessor.named_transformers_.get('num')
-        if num_transformer and hasattr(num_transformer, 'inverse_transform'):
-            centers_original = num_transformer.inverse_transform(centers)
-            for i, center in enumerate(centers_original):
-                centers_dict[f"簇 {i}"] = {numeric_cols_in[j]: round(float(center[j]), 4) for j in range(len(numeric_cols_in))}
     
     cluster_counts = pd.Series(labels).value_counts().sort_index().to_dict()
     cluster_counts = {f"簇 {k}": int(v) for k, v in cluster_counts.items()}
@@ -612,7 +567,6 @@ def _do_clustering_kmeans(df, columns, n_clusters, ground_truth_col=''):
             "silhouette_score": round(sil_score, 4),
             "inertia": round(inertia, 4),
         },
-        "cluster_centers": centers_dict,
         "cluster_counts": cluster_counts,
         "columns_used": columns,
         "encoded_dimension": X_encoded.shape[1],

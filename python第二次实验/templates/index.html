@@ -1040,7 +1040,7 @@ async function runAnalysis(){
         if(data.algorithm==='K-Means'){
             html+=`<div class="result-section"><h4>📋 内部评估指标</h4>
                 <div class="code-block">轮廓系数 (Silhouette Score): ${ev.silhouette_score} | 惯性 (Inertia): ${ev.inertia}</div></div>`;
-            html+=`<div class="result-section"><h4>聚类中心</h4><div class="code-block">${JSON.stringify(data.cluster_centers,null,2)}</div></div>`;
+            
         }else{
             html+=`<div class="result-section"><h4>📋 内部评估指标</h4>
                 <div class="code-block">轮廓系数 (Silhouette Score): ${ev.silhouette_score} | 噪声点数: ${ev.noise_points} | eps: ${data.eps}</div></div>`;

@@ -983,19 +983,58 @@ async function loadColsForViz(){
     }catch(e){}}
 
 async function generateChart(){
-    const ct=$('chartType').value,xc=$('xCol').value;
-    if(['bar','line','scatter','pie','histogram','box'].includes(ct)&&!xc){showToast('请选择X轴列','error');return}
+    const ct=$('chartType').value, xc=$('xCol').value;
+    if(['bar','line','scatter','pie','histogram','box'].includes(ct)&&!xc){
+        // 这一处也可以改为原生居中弹窗
+        alert('请选择X轴列');
+        return;
+    }
     showLoading('生成图表...');
     try{
-        const data=await api('/api/visualize',{method:'POST',body:JSON.stringify({
-            chart_type:ct,x_col:xc||undefined,y_col:$('yCol').value||undefined,
-            title:$('chartTitle').value||undefined,top_n:parseInt($('topN').value)||10})});
+        const data=await api('/api/visualize',{
+            method:'POST',
+            body:JSON.stringify({
+                chart_type:ct,
+                x_col:xc||undefined,
+                y_col:$('yCol').value||undefined,
+                title:$('chartTitle').value||undefined,
+                top_n:parseInt($('topN').value)||10
+            })
+        });
+
+        // ==================== 核心：拦截后端数据错误 ====================
+        if (data && data.error) {
+            let friendlyMsg = "当前数据不满足作图条件，请调整参数。";
+
+            // 针对类似 "could not convert string to float" 这种文本列当做数值列计算的经典错误进行拦截翻译
+            if (data.error.includes("convert string to float") || data.error.includes("could not convert")) {
+                friendlyMsg = "图表生成失败：您选择的列包含文本内容（如 '闭卷笔试'），无法进行数值计算。请重新选择 X 轴或 Y 轴！";
+            } else if (data.error.includes("不存在")) {
+                friendlyMsg = "图表生成失败：所选的数据列在文件中不存在，请重新选择。";
+            } else if (data.error.includes("数值列不足")) {
+                friendlyMsg = "图表生成失败：当前图表类型需要更多的数值型数据列。";
+            }
+
+            // 直接在这里使用居中带确认键的弹窗拦截，阻止后续渲染
+            alert(friendlyMsg);
+            hideLoading();
+            return;
+        }
+        // ============================================================
+
         $('chartResult').classList.remove('hidden');
-        $('chartImage').innerHTML=`<img src="${data.image}" alt="图表">`;
+        $('chartImage').innerHTML=`< img src="${data.image}" alt="图表">`;
         $('chartResult').scrollIntoView({behavior:'smooth'});
-    }catch(e){showToast('图表生成失败: '+e.message,'error')}
-    hideLoading();
-}
+
+        // 成功时保留你原本的右上角提示
+        showToast('图表生成成功！', 'success');
+    }catch(e){
+        // ==================== 核心：拦截网络/系统级崩溃错误 ====================
+        let errMsg = e.message;
+
+        // 如果错误信息里包含了后端的原生报错，统一拦截重写
+        if (errMsg.includes("convert string to float") || errMsg.includes("could not convert")) {
+            errMsg = "您选择的列包含非数
 
 // ==================== 智能分析 ====================
 $('analysisAlgorithm').addEventListener('change',function(){
